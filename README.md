@@ -17,8 +17,21 @@ The application provides an interactive Streamlit dashboard for anomaly
 detection, driver analysis, AI-generated business summaries, email alerts,
 and alert history.
 
-Screenshots will be added after the final validation and testing of the
-application.
+### Anomaly Detection Dashboard
+
+![Anomaly Detection Dashboard](screenshots/dashboard.png)
+
+### Driver Analysis & AI Business Summary
+
+![Driver Analysis and AI Summary](screenshots/driver-analysis.png)
+
+### Email Alert
+
+![Email Alert](screenshots/email-alert.png)
+
+### Alert History
+
+![Alert History](screenshots/alert-history.png)
 
 
 ## Why this architecture
