@@ -77,7 +77,7 @@ available_metrics = result.available_metrics
 available_dimensions = detect_available_dimensions(df)
 
 with st.expander("Preview cleaned data", expanded=False):
-    st.dataframe(df.head(50), use_container_width=True)
+    st.dataframe(df.head(50), width="stretch")
 
 # ---------------------------------------------------------------------------
 # Step 3: Metric selection + detection
@@ -118,7 +118,7 @@ if not anomalies_only.empty:
         name="Anomaly", text=anomalies_only["severity"], hovertemplate="%{x}<br>%{y}<br>Severity: %{text}",
     ))
 fig.update_layout(title=f"{metric.capitalize()} trend with detected anomalies", height=420, hovermode="x unified")
-st.plotly_chart(fig, use_container_width=True)
+st.plotly_chart(fig, width="stretch")
 
 # ---------------------------------------------------------------------------
 # Step 6: Anomaly table + selection
@@ -129,12 +129,35 @@ if anomalies_only.empty:
     st.stop()
 
 display_cols = ["date", "actual_value", "baseline_mean", "pct_change", "z_score", "direction", "is_good_or_bad", "severity"]
-st.dataframe(anomalies_only[display_cols], use_container_width=True, hide_index=True)
+st.dataframe(anomalies_only[display_cols], width="stretch", hide_index=True)
 
 anomalies_only = anomalies_only.reset_index(drop=True)
-options = [f"{row.date.date()} — {row.severity} ({row.pct_change:+.1f}%)" for row in anomalies_only.itertuples()]
-selected_idx = st.selectbox("Select an anomaly to investigate", range(len(options)), format_func=lambda i: options[i])
+
+options = [
+    f"{row.date.date()} — {row.severity} ({row.pct_change:+.1f}%)"
+    for row in anomalies_only.itertuples()
+]
+
+selected_idx = st.selectbox(
+    "Select an anomaly to investigate",
+    range(len(options)),
+    format_func=lambda i: options[i],
+)
+
 selected_row = anomalies_only.iloc[selected_idx]
+
+# Clear previous AI evidence when the selected anomaly changes
+selected_anomaly_key = (
+    str(selected_row["date"]),
+    selected_row["severity"],
+    selected_row["direction"],
+    float(selected_row["pct_change"]),
+)
+
+if st.session_state.get("selected_anomaly_key") != selected_anomaly_key:
+    st.session_state.pop("evidence", None)
+    st.session_state.pop("summary", None)
+    st.session_state["selected_anomaly_key"] = selected_anomaly_key
 
 # ---------------------------------------------------------------------------
 # Step 7: Driver analysis + AI summary
@@ -174,7 +197,7 @@ if "evidence" in st.session_state and "summary" in st.session_state:
     st.write(summary["investigate_next"])
 
     st.divider()
-    st.markdown(f"**Severity:** {evidence['severity']} — email alerts are only sent for MEDIUM/HIGH severity, and only once per metric+date.")
+    st.markdown(f"**Severity:** {evidence['severity']} — email alerts are only sent for MEDIUM/HIGH severity, and only once per metric+date+ direction.")
     if st.button("📧 Trigger email alert for this anomaly"):
         with st.spinner("Processing alert..."):
             outcome = process_alert(evidence, summary)
@@ -192,6 +215,7 @@ st.subheader("Alert History")
 history = get_alert_history()
 if history:
     hist_df = pd.DataFrame(history)[["created_at", "metric", "anomaly_date", "severity", "direction", "pct_change", "z_score", "emailed", "summary"]]
-    st.dataframe(hist_df, use_container_width=True, hide_index=True)
+    st.dataframe(hist_df, width="stretch", hide_index=True)
 else:
     st.caption("No alerts recorded yet.")
+

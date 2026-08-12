@@ -90,7 +90,7 @@ def process_alert(evidence: dict, summary: dict) -> dict:
         return {"status": "skipped", "reason": f"Severity '{severity}' is below the alerting threshold."}
 
     if already_alerted(metric, date, direction):
-        return {"status": "skipped", "reason": "An alert for this metric and date was already sent previously."}
+        return {"status": "skipped", "reason": "An alert for this metric, date, and direction  was already sent previously."}
 
     to_addresses = [a.strip() for a in ALERT_EMAIL_TO.split(",") if a.strip()]
     subject = build_subject(metric, severity)
