@@ -11,6 +11,16 @@ something you should be able to explain and defend.
 
 ---
 
+## Application Preview
+
+The application provides an interactive Streamlit dashboard for anomaly
+detection, driver analysis, AI-generated business summaries, email alerts,
+and alert history.
+
+Screenshots will be added after the final validation and testing of the
+application.
+
+
 ## Why this architecture
 
 The core principle: **statistics decides, the LLM explains.**
@@ -19,32 +29,33 @@ The core principle: **statistics decides, the LLM explains.**
 Excel file
    │
    ▼
-loader.py        → reads & normalizes columns/types
-   │
+loader.py
+   │  Reads and normalizes Excel data
    ▼
-validator.py     → cleans data, reports errors/warnings, refuses to analyze garbage
-   │
+validator.py
+   │  Validates structure, types, required columns
    ▼
-anomaly.py       → rolling baseline + % change + z-score → NORMAL/LOW/MEDIUM/HIGH
-   │                (the LLM never sees this step — it cannot override it)
+anomaly.py
+   │  Rolling baseline → % change → z-score → severity
+   │  Statistics decides whether an anomaly exists
    ▼
-drivers.py       → breaks the confirmed anomaly down by region/category/product/
-                    segment and by related metrics (orders, AOV, etc.)
-   │
+drivers.py
+   │  Compares dimensions and related metrics
+   │  Identifies what moved together with the anomaly
    ▼
-llm.py           → given ONLY the structured evidence above, writes a business
-                    summary: what happened / observed drivers / significance /
-                    what to investigate next. Explicitly forbidden from inventing
-                    facts or claiming causation for things not in the evidence.
-   │
+llm.py
+   │  Receives structured evidence only
+   │  Generates an evidence-constrained business summary
    ▼
-email_alert.py   → severity-gated (config.py), deduped against alert_history.py
-   │
+email_alert.py
+   │  Checks severity → checks deduplication → sends email
    ▼
-alert_history.py → SQLite; prevents the same metric+date firing twice
-   │
+alert_history.py
+   │  SQLite audit trail
+   │  Dedup key: metric + date + direction
    ▼
-app.py           → Streamlit UI wiring all of the above together
+app.py
+      Streamlit UI connecting the workflow
 ```
 
 Why split it this way? Each module has one job and one owner-of-truth:
@@ -108,10 +119,15 @@ app is fully demoable without any API key.
 
 - Emails are only sent for severities in `ALERT_SEVERITIES` (default:
   `MEDIUM`, `HIGH`) — configured in `config.py`.
-- Before sending, `alert_history.py` is checked for an existing record with the
-  same `(metric, date)`. If one exists, the alert is skipped, not resent.
-- Every attempt (sent, skipped, or failed) is recorded, so `alert_history.db`
-  is a complete audit trail, not just a log of successes.
+- Before sending, `alert_history.py` checks for an existing alert with the same
+  `(metric, date, direction)`. If one exists, the alert is skipped rather than
+  resent.
+- LOW-severity anomalies are not emailed because they are below the configured
+  alerting threshold.
+- Every alert attempt is recorded in `alert_history.db`, creating an audit
+  trail of sent, skipped, and failed alerts.
+- Including direction in the deduplication key allows an UP and DOWN anomaly on
+  the same metric and date to be treated as separate alert events.
 
 ---
 
@@ -207,13 +223,48 @@ This is intentionally a clean, explainable v1. Logical next steps:
 - **Alert digesting** — batch multiple same-day anomalies across metrics into
   a single digest email instead of one email per metric.
 
+## Testing & Validation
+
+The application was tested across anomaly severity levels and alert scenarios
+to verify that detection and email behavior work as intended.
+
+### Alert behavior tested
+
+| Scenario | Expected behavior | Result |
+|---|---|---|
+| MEDIUM anomaly on first alert | Email is sent | ✅ Passed |
+| HIGH anomaly | HIGH severity detected | ✅ Passed |
+| Same metric + date + direction triggered again | Duplicate alert is skipped | ✅ Passed |
+| LOW-severity anomaly | Email is not sent | ✅ Passed |
+| Alert history checked after processing | Alert is recorded in SQLite | ✅ Passed |
+
+**Note:** The application has now been validated with LOW, MEDIUM, and HIGH severity anomalies. HIGH-severity detection, driver analysis, and AI summary generation were successfully verified. Alert deduplication was also confirmed for the HIGH-severity test because the same metric, date, and direction had already been recorded.
+
+### Example test result
+
+For the tested revenue anomaly on `2026-07-10`:
+
+- Baseline: `101,565.30`
+- Revenue movement: `-35.5%`
+- Z-score: `-4.36`
+- Severity: `MEDIUM`
+- Direction: `DOWN`
+- First alert attempt: Email sent successfully
+- Repeated alert attempt: Duplicate alert skipped
+
+This confirms that the system can detect a statistically significant business
+movement, classify its severity, send an eligible alert, and prevent repeated
+notifications for the same metric, date, and direction.
+
 ## Interview talking points
 
 - Why detection and explanation are deliberately separated (auditability,
   prevents LLM hallucination from ever changing a business decision).
 - Why both a percentage-change AND a z-score threshold are required (trade-off
   between magnitude-based and volatility-based false positives).
-- How the dedup key (`metric`, `date`) in SQLite prevents alert fatigue.
+- How the dedup key (`metric`, `date`, `direction`) in SQLite prevents alert
+  fatigue while allowing opposite-direction events to be treated separately.
 - How the driver analysis distinguishes **correlation** (what the data shows
   moved together) from **causation** (a hypothesis the LLM is only allowed to
   suggest, explicitly labeled as such).
+
